@@ -295,7 +295,7 @@ function master_cap_add_coin(levelNum, value, index)
     levelNum = levelNum or master_cap_get_level(index)
     local levelData = gMasterCapServerState[levelNum]
 
-    levelData.capTimer = levelData.capTimer + value*30*(gPlayerSyncTable[index or 0].coinDensity)*(1/(network_player_master_cap_count(levelNum)*0.5 + 0.5))
+    levelData.capTimer = levelData.capTimer + value*30*(1/(network_player_master_cap_count(levelNum)*0.5 + 0.5))
     levelData.coins = math.clamp(levelData.coins + value, 0, 999)
 
     if network_is_server() then
@@ -648,8 +648,6 @@ function master_cap_request_scarecrow_spawn()
     end
 end
 
-local prevCoinDensity = {}
-
 local prevCoinsBest = 0
 local prevTimeBest = 0
 local entranceAreaNum = 1
@@ -675,37 +673,6 @@ local function on_sync()
 
 
     prevCoinsBest, prevTimeBest = master_cap_get_record(levelNum)
-
-    -- Count Coin Density for area
-    gPlayerSyncTable[0].coinDensity = 1
-    local areaCoinDistance = 0
-    local areaCoinCount = 0
-    -- Replace all Object Models
-    for i = 0, NUM_OBJ_LISTS - 1 do
-        local o = obj_get_first(i)
-        local prevO = o
-        while o ~= nil do
-            local coinValue = math.max(o.oNumLootCoins, o.oDamageOrCoinValue, o.oCustomCoins)
-            if coinValue > 0 then
-                areaCoinCount = areaCoinCount + coinValue
-                prevO = o
-                areaCoinDistance = (areaCoinDistance + math.sqrt((o.oPosX + prevO.oPosX)^2 + (o.oPosY + prevO.oPosY)^2 + (o.oPosZ + prevO.oPosZ)^2))*0.5
-            end
-            o = obj_get_next(o)
-        end
-    end
-    gPlayerSyncTable[0].coinDensity = areaCoinCount > 0 and math.ceil(areaCoinDistance / areaCoinCount)/100*0.8 + 0.2 or 1
-
-    -- Failsafe exiting and reentering
-    if not prevCoinDensity[np.currLevelNum] then
-        prevCoinDensity[np.currLevelNum] = {}
-    end
-    if prevCoinDensity[np.currLevelNum][np.currAreaIndex] then
-        gPlayerSyncTable[0].coinDensity = math.min(gPlayerSyncTable[0].coinDensity, prevCoinDensity[np.currLevelNum][np.currAreaIndex])
-    end
-    prevCoinDensity[np.currLevelNum][np.currAreaIndex] = gPlayerSyncTable[0].coinDensity
-
-    log_to_console("Better Coins: Master Cap Coin Density set to " .. tostring(gPlayerSyncTable[0].coinDensity) .. " Seconds per Coin")
 
     local levelNum = gNetworkPlayers[0].currLevelNum
     local areaNum = gNetworkPlayers[0].currAreaIndex
