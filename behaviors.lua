@@ -198,27 +198,69 @@ hook_coins_behavior(id_bhvMessagePanel, false, bhv_message_panel_set_coins, bhv_
 hook_coins_behavior(id_bhvSignOnWall, false, bhv_message_panel_set_coins, bhv_message_panel_reward)
 ]]
 
+
 local sYoshiShouldExplode = false
+local sYoshiAlreadyExploded = false
 ---@param o Object
-local function bhv_yoshi_blew_up(o)
-    if sYoshiShouldExplode then
-        obj_mark_for_deletion(o)
-    end
+local function bhv_coins_yoshi_init(o)
+    sYoshiShouldExplode = false
 end
 
 ---@param o Object
-local function bhv_yoshi_reward(o)
+local function bhv_coins_yoshi_loop(o)
+    local m = nearest_interacting_mario_state_to_object(o)
+    local ms = get_mario_state_from_object(o)
     if o.oToadMessageState ~= 0 then return end
     if o.oAction == YOSHI_ACT_TALK then
-        sYoshiShouldExplode = true
+        if not sYoshiAlreadyExploded and m.action == ACT_READING_NPC_DIALOG then
+            smlua_text_utils_dialog_replace(DIALOG_161,1,4,30,200,DIALOG_YOSHI_INSURANCE)
+            sYoshiShouldExplode = true
+        else
+            smlua_text_utils_dialog_replace(DIALOG_161,1,4,30,200,DIALOG_YOSHI_REPETITION)
+            sYoshiShouldExplode = false
+        end
     elseif sYoshiShouldExplode then
-        spawn_coin_spawner(o, 100 * (gBetterCoinValues.numCoinsToLife or 50), false)
-        spawn_non_sync_object(id_bhvExplosion, E_MODEL_EXPLOSION, o.oPosX, o.oPosY, o.oPosZ, nil)
-        obj_mark_for_deletion(o)
+        o.oAction = YOSHI_ACT_IDLE
+        if o.oTimer == 0 then 
+            spawn_sync_object(id_bhvCutsceneBobomb, E_MODEL_BLACK_BOBOMB, o.oPosX, o.oPosY + 1000, o.oPosZ, nil)
+            play_sound(SOUND_OBJ_BOBOMB_BUDDY_TALK, gGlobalSoundSource)
+        end
+        if o.oTimer == 30 then
+            spawn_coin_spawner(o, 100 * (gBetterCoinValues.numCoinsToLife or 50), false)
+            spawn_sync_object(id_bhvExplosion, E_MODEL_EXPLOSION, o.oPosX, o.oPosY, o.oPosZ, nil)
+            sYoshiAlreadyExploded = true
+            sYoshiShouldExplode = false
+            obj_mark_for_deletion(o)
+        end
+    elseif sYoshiAlreadyExploded and o.oAction == YOSHI_ACT_GIVE_PRESENT then
+        o.oAction = YOSHI_ACT_IDLE
+        set_mario_action(m, ACT_IDLE, 0)
     end
 end
 
-hook_coins_behavior(id_bhvYoshi, false, bhv_yoshi_blew_up, bhv_yoshi_reward)
+hook_coins_behavior(id_bhvYoshi, false, bhv_coins_yoshi_init, bhv_coins_yoshi_loop)
+
+---@param o Object
+local function bhv_cutscene_bomb_init(o)
+    o.oFlags = OBJ_FLAG_COMPUTE_ANGLE_TO_MARIO | OBJ_FLAG_HOLDABLE | OBJ_FLAG_COMPUTE_DIST_TO_MARIO | OBJ_FLAG_UPDATE_GFX_POS_AND_ANGLE | OBJ_FLAG_SET_FACE_YAW_TO_MOVE_YAW
+    o.oAnimations = gObjectAnimations.bobomb_seg8_anims_0802396C
+    cur_obj_init_animation(0)
+    bhv_bobomb_buddy_init()
+end
+
+---@param o Object
+local function bhv_cutscene_bomb_loop(o)
+    o.oIntangibleTimer = 0
+    if o.oTimer >= 27 then 
+        cur_obj_scale(1 + ((o.oTimer - 23) / 5))
+    end
+    if o.oTimer == 30 then
+        obj_mark_for_deletion(o)
+    end
+    bhv_bobomb_buddy_loop()
+end
+
+id_bhvCutsceneBobomb = hook_behavior(nil, OBJ_LIST_GENACTOR, true, bhv_cutscene_bomb_init, bhv_cutscene_bomb_loop)
 
 ---@param o Object
 local function bhv_recovery_heart_set_coins(o)
